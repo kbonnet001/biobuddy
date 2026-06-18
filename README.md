@@ -2,7 +2,7 @@
 
 ![biobuddy](https://github.com/user-attachments/assets/c8689155-0b26-4e13-835c-cdb6696e1acb)
 
-`BioBuddy` is an open-source tool for [translating](#model-translation), [creating](#model-creation) and [personalizing](#model-personalization) musculoskeletal models across different formats (e.g., .osim, .bioMod). By enabling reliable interoperability between modeling environments, BioBuddy allows researchers to focus on scientific questions rather than technical constraints.
+`BioBuddy` is an open-source tool for [translating](#model-translation), [creating](#model-creation) and [personalizing](#model-personalization) musculoskeletal models across different formats (e.g., .osim, .bioMod, ...). By enabling reliable interoperability between modeling environments, BioBuddy allows researchers to focus on scientific questions rather than technical constraints.
 
 <!---
 [![Actions Status](https://github.com/pyomeca/biobuddy/workflows/CI/badge.svg)](https://github.com/pyomeca/biobuddy/actions)
@@ -28,6 +28,7 @@
       - [Modifying the kinematic chain](#modifying-the-kinematic-chain)
       - [Flattening the model](#flattening-the-model)
   - [Model visualization](#model-visualization)
+  - [Desktop model editor](#desktop-model-editor)
 - [Note](#note)
 - [How to cite](#how-to-cite)
 - [How to contribute](#how-to-contribute)
@@ -82,18 +83,24 @@ pip install biobuddy
 ## Model translation
 You can load the original model using one of the `BiomechanicalModelReal().from_[format]` methods, and then export it 
 into another format using the `BiomechanicalModelReal.to_[format]` method (see [example](examples/read_and_write_models.py)).
+
+The available formats for now are:
+- OpenSim (.osim)
+- biorbd (.bioMod)
+- BVH (.bvh)
+- FBX (.fbx) for reading skeletal hierarchies
+- URDF (.urdf), without muscles for now, but this will be added in the future.
+
 ```python3
 from biobuddy import BiomechanicalModelReal
 
 # Read an .osim file
-model = BiomechanicalModelReal().from_osim(
-    filepath=osim_filepath,
-    # Other optional parameters here
-)
+model = BiomechanicalModelReal().from_osim(filepath=osim_filepath)
 
 # Translate it into a .bioMod file
 model.to_biomod(biomod_filepath)
 ```
+
 See the example [read_and_write_models.py](examples/read_and_write_models.py) for more details.
 
 ## Model creation
@@ -350,6 +357,27 @@ model.animate(
     model_path=model_path,
 )
 ```
+
+## Desktop model editor
+BioBuddy also includes an early desktop editor for interactive model cleanup. Install the optional GUI dependency and
+launch it with:
+
+```bash
+pip install biobuddy[gui]
+python -m biobuddy.gui
+```
+If you are working from sources, you will need to install :
+```bash
+conda install -c conda-forge PySide6
+```
+
+The editor supports opening `.bioMod`, `.osim`, and `.urdf` files, browsing the segment hierarchy, editing segment
+parents, DoFs, joint ranges, segment inertia parameters, markers, muscle scalar parameters, and fixed via points, then
+saving the result as `.bioMod`. A synchronized 3D preview shows the kinematic chain, markers, and muscle paths while
+the user edits the model. The muscle tab also exposes editable origin and insertion points, the validation tab reports
+model-level consistency issues, and clicking near a joint in the preview reselects the corresponding segment in the
+tree. The muscle tab can also create or remove muscle groups and muscles, and clicking near a marker in the preview
+selects it in the marker editor.
 ![model_graph](docs/images/model_graph.png)
 
 
