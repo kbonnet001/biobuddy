@@ -51,9 +51,7 @@ def analyzer(fake_model):
     analyzer.states = np.array([[0, 1, 2, 3, 3.14], [0, 0, 0, 0, 0]])
 
     analyzer.biorbd_model = MagicMock()
-    analyzer.biorbd_model.musclesLengthJacobian.return_value.to_array.return_value = (
-        np.ones((3, 2))
-    )
+    analyzer.biorbd_model.musclesLengthJacobian.return_value.to_array.return_value = np.ones((3, 2))
 
     analyzer._ranges_by_joint = None
 
@@ -625,9 +623,7 @@ def test_get_correct_part_mvt_all_correct(analyzer):
         ]
     )
 
-    correct_idx, incorrect_idx, correct_q, incorrect_q = analyzer.get_correct_part_mvt(
-        q
-    )
+    correct_idx, incorrect_idx, correct_q, incorrect_q = analyzer.get_correct_part_mvt(q)
 
     assert len(correct_idx) == 1
     assert len(incorrect_idx) == 0
@@ -652,9 +648,7 @@ def test_get_correct_part_mvt_all_incorrect(analyzer):
         ]
     )
 
-    correct_idx, incorrect_idx, correct_q, incorrect_q = analyzer.get_correct_part_mvt(
-        q
-    )
+    correct_idx, incorrect_idx, correct_q, incorrect_q = analyzer.get_correct_part_mvt(q)
 
     assert len(correct_idx) == 0
     assert len(incorrect_idx) == 1

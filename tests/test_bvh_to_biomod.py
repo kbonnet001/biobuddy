@@ -79,7 +79,8 @@ def test_bvh_parser_rejects_motion_rows_with_wrong_channel_count(tmp_path: Path)
     """Reject BVH motion data when the sample width does not match the hierarchy channels."""
 
     filepath = tmp_path / "bad_motion.bvh"
-    filepath.write_text("""HIERARCHY
+    filepath.write_text(
+        """HIERARCHY
 ROOT root
 {
     OFFSET 0 0 0
@@ -99,7 +100,8 @@ Frames: 2
 Frame Time: 0.0333333
 0 0 0 10 20 30 1 2 3
 1 2 3 40 50 60 4 5
-""")
+"""
+    )
 
     with pytest.raises(ValueError, match="Each BVH motion row must contain 9 channel values."):
         BvhModelParser(filepath=str(filepath))
@@ -119,13 +121,15 @@ def test_bvh_parser_rejects_invalid_joint_channel_declaration(tmp_path: Path):
     """Reject joints whose declared channel count does not match the provided channels."""
 
     filepath = tmp_path / "bad_channels.bvh"
-    filepath.write_text("""HIERARCHY
+    filepath.write_text(
+        """HIERARCHY
 ROOT root
 {
     OFFSET 0 0 0
     CHANNELS 6 Xposition Yposition Zposition Xrotation Yrotation
 }
-""")
+"""
+    )
 
     with pytest.raises(ValueError, match="Joint root declares 6 channels but provides 5."):
         BvhModelParser(filepath=str(filepath))
@@ -135,13 +139,15 @@ def test_bvh_parser_accepts_hierarchy_without_motion_block(tmp_path: Path):
     """Allow loading a pure BVH hierarchy even when no motion samples are provided."""
 
     filepath = tmp_path / "hierarchy_only.bvh"
-    filepath.write_text("""HIERARCHY
+    filepath.write_text(
+        """HIERARCHY
 ROOT root
 {
     OFFSET 0 0 0
     CHANNELS 0
 }
-""")
+"""
+    )
 
     parser = BvhModelParser(filepath=str(filepath))
 
@@ -156,7 +162,8 @@ def test_bvh_parser_rejects_invalid_end_site_block(tmp_path: Path):
     """Reject malformed BVH end sites."""
 
     filepath = tmp_path / "bad_end_site.bvh"
-    filepath.write_text("""HIERARCHY
+    filepath.write_text(
+        """HIERARCHY
 ROOT root
 {
     OFFSET 0 0 0
@@ -166,7 +173,8 @@ ROOT root
         CHANNELS 0
     }
 }
-""")
+"""
+    )
 
     with pytest.raises(ValueError, match="Expected an OFFSET line inside End Site."):
         BvhModelParser(filepath=str(filepath))
