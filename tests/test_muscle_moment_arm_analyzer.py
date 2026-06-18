@@ -1,8 +1,10 @@
 import numpy as np
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from examples.muscle_moment_arm_analyzer import MuscleMomentArmAnalyzer
+from biobuddy.model_modifiers.modify_rom_based_on_moment_arm import (
+    MuscleMomentArmAnalyzer,
+)
 from biobuddy import BiomechanicalModelReal
 import biorbd
 from pathlib import Path
@@ -20,38 +22,50 @@ def fake_model():
     model.dof_names = ["q1", "q2"]
     model.muscle_names = ["m1", "m2", "m3"]
 
-    # DOF ranges: shape (2, nb_q)
-    model.get_dof_ranges.return_value = np.array([[-1.0, -2.0], [1.0, 2.0]])
+    model.get_dof_ranges.return_value = np.array([[0, 3.14], [-3.14, 3.14]])
 
     return model
 
 
 @pytest.fixture
 def analyzer(fake_model):
-    with (
-        patch("examples.muscle_moment_arm_analyzer.BiomechanicalModelReal") as mock_bio_model,
-        patch("examples.muscle_moment_arm_analyzer.biorbd.Model") as mock_biorbd,
-    ):
+    analyzer = MuscleMomentArmAnalyzer.__new__(MuscleMomentArmAnalyzer)
 
-        mock_bio_model().from_biomod.return_value = fake_model
+    analyzer.model = fake_model
+    analyzer.muscle_moment_arm = np.array(
+        [
+            [
+                [-1, -0.5, 0.5, 1, 1],
+                [1, 1, -1, -1, -1],
+                [-1, -1, -1, 1, 1],
+            ],
+            [
+                [0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0],
+            ],
+        ],
+        dtype=float,
+    )
 
-        fake_biorbd = MagicMock()
-        mock_biorbd.return_value = fake_biorbd
+    analyzer.states = np.array([[0, 1, 2, 3, 3.14], [0, 0, 0, 0, 0]])
 
-        analyzer = MuscleMomentArmAnalyzer("fake_path.bioMod")
-        analyzer.model = fake_model
-        analyzer.biorbd_model = fake_biorbd
+    analyzer.biorbd_model = MagicMock()
+    analyzer.biorbd_model.musclesLengthJacobian.return_value.to_array.return_value = np.ones((3, 2))
 
-        return analyzer
+    analyzer._ranges_by_joint = None
+
+    return analyzer
 
 
 current_path_file = Path(__file__).parent.parent
-MODEL_EXAMPLE = f"{current_path_file}/examples/models/wholebody_reference.bioMod"
+MODEL_EXAMPLE_PATH = f"{current_path_file}/examples/models/wholebody_reference.bioMod"
+MODEL_REAL = BiomechanicalModelReal().from_biomod(MODEL_EXAMPLE_PATH)
 
 
 @pytest.fixture
 def analyzer_example():
-    return MuscleMomentArmAnalyzer(MODEL_EXAMPLE)
+    return MuscleMomentArmAnalyzer(MODEL_EXAMPLE_PATH, MODEL_REAL)
 
 
 def test_initialization(analyzer_example):
@@ -74,76 +88,72 @@ def test_initialization(analyzer_example):
     assert analyzer_example.sign_lever_arm == {}
 
 
-# ---------------------------------------------------------------------
-
 # ---------------------------
 # Tests : sign_lever_arm
 # ---------------------------
 
 
 def test_create_sign_lever_arm_user_valid(analyzer):
+
     signs = np.array([[1, -1, 0], [0, 1, -1]])
 
     analyzer.create_sign_lever_arm_user(signs)
 
-    assert analyzer.sign_lever_arm["q1"]["m1"] == 1
-    assert analyzer.sign_lever_arm["q1"]["m2"] == -1
-    assert analyzer.sign_lever_arm["q1"]["m3"] == 0
-    assert analyzer.sign_lever_arm["q2"]["m1"] == 0
-    assert analyzer.sign_lever_arm["q2"]["m2"] == 1
-    assert analyzer.sign_lever_arm["q2"]["m3"] == -1
+    expected = {
+        "q1": {"m1": 1, "m2": -1, "m3": 0},
+        "q2": {"m1": 0, "m2": 1, "m3": -1},
+    }
+
+    assert analyzer.sign_lever_arm == expected
 
 
-def test_create_sign_lever_arm_user_invalid_shape(analyzer):
-    signs = np.array([[1, 0]])
-
-    with pytest.raises(ValueError):
-        analyzer.create_sign_lever_arm_user(signs)
-
-
-def test_create_sign_lever_arm_user_invalid_values(analyzer):
-    signs = np.array([[2, 0, 1], [0, 1, -1]])
+def test_create_sign_lever_arm_user_wrong_shape(analyzer):
 
     with pytest.raises(ValueError):
-        analyzer.create_sign_lever_arm_user(signs)
+        analyzer.create_sign_lever_arm_user(np.array([[1, 0]]))
 
 
-# ---------------------------
-# Tests : joint states
-# ---------------------------
+def test_create_sign_lever_arm_user_wrong_value(analyzer):
+
+    with pytest.raises(ValueError):
+        analyzer.create_sign_lever_arm_user(np.array([[2, 0, 1], [0, 1, -1]]))
 
 
-def test_compute_joint_states(analyzer):
-    states = analyzer.compute_joint_states(5)
-
-    assert states.shape == (2, 5)
-    assert np.all(states[0] >= -1.0)
-    assert np.all(states[0] <= 1.0)
+# # ---------------------------
+# # Tests : moment arm (mocked)
+# # ---------------------------
 
 
-# ---------------------------
-# Tests : moment arm (mocked)
-# ---------------------------
+def test_compute_moment_arm_ranges(analyzer):
+
+    result = analyzer.compute_moment_arm_ranges()
+
+    assert isinstance(result, dict)
+    assert "q1" in result
+    assert "q2" in result
+    assert "m1" in result["q1"]
+
+    # shape logique
+    assert isinstance(result["q1"]["m1"], list)
+    assert "range" in result["q1"]["m1"][0]
+    assert "sign" in result["q1"]["m1"][0]
 
 
-def test_compute_moment_arm(analyzer):
-    nb_states = 4
-    states = np.zeros((2, nb_states))
+def test_ranges_by_joint_lazy_property(analyzer):
 
-    fake_jacobian = MagicMock()
-    fake_jacobian.to_array.return_value = np.ones((3, 2))
+    # first call triggers computation
+    r1 = analyzer.ranges_by_joint
 
-    analyzer.biorbd_model.musclesLengthJacobian.return_value = fake_jacobian
+    # second call uses cache
+    r2 = analyzer.ranges_by_joint
 
-    result = analyzer.compute_moment_arm(states)
-
-    assert result.shape == (2, 3, nb_states)
-    assert np.all(result == 1)
+    assert r1 is r2  # same object (cache)
+    assert isinstance(r1, dict)
 
 
-# ---------------------------
-# Tests : zero finding
-# ---------------------------
+# # ---------------------------
+# # Tests : zero finding
+# # ---------------------------
 
 
 def test_find_zero_newton(analyzer):
@@ -165,16 +175,15 @@ def test_find_zero_newton(analyzer):
     assert abs(q_star[0]) < 1e-6
 
 
-# ---------------------------
-# Tests : compute_moment_arm_ranges
-# ---------------------------
+# # ---------------------------
+# # Tests : compute_moment_arm_ranges
+# # ---------------------------
 
 
 # 1. Case: all zeros
 # ---------------------------
 def test_all_zero(analyzer):
-    analyzer.compute_joint_states = lambda n: np.zeros((2, 5))
-    analyzer.compute_moment_arm = lambda states: np.zeros((2, 3, 5))
+    analyzer.muscle_moment_arm = np.zeros((2, 3, 5))
 
     result = analyzer.compute_moment_arm_ranges()
 
@@ -193,8 +202,7 @@ def test_all_zero(analyzer):
 # 2. Case: constant positive sign
 # ---------------------------
 def test_constant_positive(analyzer):
-    analyzer.compute_joint_states = lambda n: np.zeros((2, 5))
-    analyzer.compute_moment_arm = lambda states: np.ones((2, 3, 5))
+    analyzer.muscle_moment_arm = np.ones((2, 3, 5))
 
     def fake_jacobian(q):
         class Obj:
@@ -214,24 +222,42 @@ def test_constant_positive(analyzer):
             assert ranges[0]["sign"] == 1
 
 
-# 3. Case: sign change
-# ---------------------------
+# # 3. Case: sign change
+# # ---------------------------
 def test_sign_change(analyzer):
-    states = np.array([[-1, -0.5, 0.5, 1, 1], [0, 0, 0, 0, 0]])
-    analyzer.compute_joint_states = lambda n: states
 
-    R = np.zeros((2, 3, 5))
-    R[0, 0, :] = [-1, -1, 1, 1, 1]
+    analyzer.model.get_dof_ranges.return_value = np.array([[-2.0, -2.0], [2.0, 2.0]])
 
-    analyzer.compute_moment_arm = lambda states: R
+    analyzer.states = np.array([[0, 1, 2, 3, 3.14], [0, 0, 0, 0, 0]])
 
-    analyzer.find_zero_newton = lambda q, iq, im: np.array([0.0, 0.0])
+    analyzer.muscle_moment_arm = np.array(
+        [
+            [
+                [-1, -0.5, 0.5, 1, 1],
+                [1, 1, -1, -1, -1],
+                [-1, -1, -1, 1, 1],
+            ],
+            [
+                [0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0],
+            ],
+        ],
+        dtype=float,
+    )
+
+    analyzer.find_zero_newton = lambda *args, **kwargs: np.array([1.5, 0.0])
 
     def fake_jacobian(q):
         class Obj:
-            def to_array(self_inner):
-                val = q[0]
-                return np.array([[val, 0], [val, 0], [val, 0]])
+            def to_array(self):
+                return np.array(
+                    [
+                        [-1 if q[0] < 0 else 1, 0],
+                        [-1 if q[0] < 0 else 1, 0],
+                        [-1 if q[0] < 0 else 1, 0],
+                    ]
+                )
 
         return Obj()
 
@@ -242,20 +268,18 @@ def test_sign_change(analyzer):
     ranges = result["q1"]["m1"]
 
     assert len(ranges) >= 2
-
-    signs = {r["sign"] for r in ranges}
-    assert signs == {-1, 1}
+    assert {r["sign"] for r in ranges} == {-1, 1}
 
 
-# 4. Case: tolerance threshold
-# ---------------------------
+# # 4. Case: tolerance threshold
+# # ---------------------------
 def test_tolerance(analyzer):
     analyzer.compute_joint_states = lambda n: np.zeros((2, 5))
 
     small_values = 1e-8
     R = np.full((2, 3, 5), small_values)
 
-    analyzer.compute_moment_arm = lambda states: R
+    analyzer.muscle_moment_arm = R
 
     result = analyzer.compute_moment_arm_ranges(tol=1e-6)
 
@@ -264,8 +288,8 @@ def test_tolerance(analyzer):
             assert result[q][m][0]["sign"] == 0
 
 
-# 5. Output structure validation
-# ---------------------------
+# # 5. Output structure validation
+# # ---------------------------
 def test_output_structure(analyzer):
     analyzer.compute_joint_states = lambda n: np.zeros((2, 5))
     analyzer.compute_moment_arm = lambda states: np.ones((2, 3, 5))
@@ -292,9 +316,9 @@ def test_output_structure(analyzer):
             assert "sign" in result[q][m][0]
 
 
-# ---------
-# Tests : get
-# ---------
+# # ---------
+# # Tests : get
+# # ---------
 def test_get_ranges_from_idx_q(analyzer):
     sign_dict = {
         "q1": {"m1": [{"range": (-1, 0), "sign": -1}]},
@@ -305,8 +329,7 @@ def test_get_ranges_from_idx_q(analyzer):
 
     assert result == sign_dict["q1"]
 
-
-def test_get_ranges_from_idx_q_and_m(analyzer):
+    # def test_get_ranges_from_idx_q_and_m(analyzer):
     sign_dict = {
         "q1": {
             "m1": [{"range": (-1, 0), "sign": -1}],
@@ -319,12 +342,12 @@ def test_get_ranges_from_idx_q_and_m(analyzer):
     assert result == sign_dict["q1"]["m2"]
 
 
-# ---------------------------
-# Tests : merge_ranges_joint
-# ---------------------------
+# # ---------------------------
+# # Tests : merge_ranges_joint
+# # ---------------------------
 def test_merge_ranges_joint(analyzer):
-    # mock ranges_by_joint structure
-    fake_ranges = {
+
+    analyzer._ranges_by_joint = {
         "q1": {
             "m1": [{"range": (-1.0, 0.0), "sign": -1}],
             "m2": [{"range": (0.0, 1.0), "sign": 1}],
@@ -332,19 +355,16 @@ def test_merge_ranges_joint(analyzer):
         }
     }
 
-    # override method dependency
-    analyzer.get_ranges_from_idx_q = lambda idx_q: fake_ranges["q1"]
+    analyzer.get_ranges_from_idx_q = lambda data, idx_q: data["q1"]
 
     result = analyzer.merge_ranges_joint(idx_q=0)
 
-    # expected unique sorted bounds
     expected = sorted([-1.0, 0.0, 1.0, -0.5, 0.5])
 
     assert result == expected
 
-
-def test_merge_ranges_joint_duplicates(analyzer):
-    fake_ranges = {
+    # def test_merge_ranges_joint_duplicates(analyzer):
+    analyzer._ranges_by_joint = {
         "q1": {
             "m1": [{"range": (-1.0, 0.0), "sign": -1}],
             "m2": [{"range": (0.0, 1.0), "sign": 1}],
@@ -352,7 +372,7 @@ def test_merge_ranges_joint_duplicates(analyzer):
         }
     }
 
-    analyzer.get_ranges_from_idx_q = lambda idx_q: fake_ranges["q1"]
+    analyzer.get_ranges_from_idx_q = lambda data, idx_q: data["q1"]
 
     result = analyzer.merge_ranges_joint(idx_q=0)
 
@@ -360,24 +380,24 @@ def test_merge_ranges_joint_duplicates(analyzer):
     assert result == [-1.0, 0.0, 1.0]
 
 
-# ---------------------------
-# Tests : merge_ranges_joint empty case
-# ---------------------------
+# # ---------------------------
+# # Tests : merge_ranges_joint empty case
+# # ---------------------------
 def test_merge_ranges_joint_empty(analyzer):
-    analyzer.get_ranges_from_idx_q = lambda idx_q: {}
+    analyzer.get_ranges_from_idx_q = lambda data, idx_q: {}
 
     result = analyzer.merge_ranges_joint(idx_q=0)
 
     assert result == []
 
 
-# -------------------
-# Tests : test accurate range
-# -------------------
+# # -------------------
+# # Tests : test accurate range
+# # -------------------
 
 
-# Error: no sign_lever_arm
-# ---------------------------
+# # Error: no sign_lever_arm
+# # ---------------------------
 def test_no_sign_lever_arm(analyzer):
     analyzer.sign_lever_arm = {}
 
@@ -385,8 +405,8 @@ def test_no_sign_lever_arm(analyzer):
         analyzer.accurate_ranges_from_true_sign()
 
 
-# Basic filtering (correct case)
-# ---------------------------
+# # Basic filtering (correct case)
+# # ---------------------------
 def test_accurate_ranges_filtering(analyzer):
     analyzer.sign_lever_arm = {
         "q1": {"m1": 1, "m2": -1, "m3": 0},
@@ -415,8 +435,8 @@ def test_accurate_ranges_filtering(analyzer):
     assert result["q1"]["m3"] == [{"range": (-1, 1), "sign": 0}]
 
 
-# Missing expected sign
-# ---------------------------
+# # Missing expected sign
+# # ---------------------------
 def test_missing_expected_sign(analyzer, capsys):
     analyzer.sign_lever_arm = {
         "q1": {"m1": 1, "m2": 1, "m3": 1},
@@ -442,9 +462,9 @@ def test_missing_expected_sign(analyzer, capsys):
         analyzer.accurate_ranges_from_true_sign()
 
 
-# -------------------
-# Tests : compare ranges
-# -------------------
+# # -------------------
+# # Tests : compare ranges
+# # -------------------
 def test_compare_ranges_no_difference(analyzer, capsys):
     analyzer.sign_lever_arm = {
         "q1": {"m1": 1},
@@ -464,8 +484,8 @@ def test_compare_ranges_no_difference(analyzer, capsys):
     assert "Correct" in captured.out
 
 
-# compare_ranges: mismatch sign
-# ---------------------------
+# # compare_ranges: mismatch sign
+# # ---------------------------
 def test_compare_ranges_sign_mismatch(analyzer):
     analyzer.sign_lever_arm = {
         "q1": {"m1": 1},
@@ -483,11 +503,11 @@ def test_compare_ranges_sign_mismatch(analyzer):
     assert diff is True
 
 
-# compare_ranges: missing muscle
-# ---------------------------
+# # compare_ranges: missing muscle
+# # ---------------------------
 def test_compare_ranges_missing_muscle(analyzer):
     analyzer.sign_lever_arm = {
-        "q1": {"m1": 1},  # expected_sign != 0 → should trigger warning
+        "q1": {"m1": 1},  # expected_sign != 0 -> should trigger warning
     }
 
     accurate_ranges = {"q1": {}}  # m1 is missing
@@ -498,8 +518,8 @@ def test_compare_ranges_missing_muscle(analyzer):
     assert diff is True
 
 
-# compare_ranges: missing dof
-# ---------------------------
+# # compare_ranges: missing dof
+# # ---------------------------
 def test_compare_ranges_missing_dof(analyzer):
     analyzer.sign_lever_arm = {
         "q1": {"m1": 1},
@@ -511,14 +531,16 @@ def test_compare_ranges_missing_dof(analyzer):
         analyzer.compare_ranges_and_user_sign(accurate_ranges)
 
 
-# ---------------------------
-# Tests : create_accurate_rom
-# ---------------------------
+# # ---------------------------
+# # Tests : create_accurate_rom
+# # ---------------------------
 def test_create_accurate_rom_basic(analyzer):
     analyzer.model.get_dof_ranges.return_value = np.array([[-1.0, -2.0], [1.0, 2.0]])
 
     analyzer.model.dof_names = ["q1", "q2"]
     analyzer.model.muscle_names = ["m1"]
+
+    analyzer.accurate_ranges_array = np.zeros((2, 2))
 
     analyzer.accurate_ranges_by_joint = {
         "q1": {
@@ -531,15 +553,15 @@ def test_create_accurate_rom_basic(analyzer):
 
     result = analyzer.create_accurate_rom()
 
+    expected = np.array(
+        [
+            [-0.5, 0.8],
+            [-1.5, 1.5],
+        ]
+    )
+
     assert result.shape == (2, 2)
-
-    # q1: max lower bound, min upper bound
-    assert result[0, 0] == -0.5
-    assert result[0, 1] == 0.8
-
-    # q2
-    assert result[1, 0] == -1.5
-    assert result[1, 1] == 1.5
+    assert np.array_equal(result, expected)
 
 
 def test_create_accurate_rom_triggers_computation(analyzer):
@@ -556,7 +578,7 @@ def test_create_accurate_rom_triggers_computation(analyzer):
     analyzer.accurate_ranges_from_true_sign = lambda: None
 
     analyzer.model.get_dof_ranges.return_value = np.array([[-1.0, -2.0], [1.0, 2.0]])
-
+    analyzer.accurate_ranges_array = np.zeros((2, 2))
     analyzer.accurate_ranges_by_joint = {
         "q1": {"m1": [{"range": (-0.5, 0.5), "sign": 1}]},
         "q2": {"m1": [{"range": (-0.5, 0.5), "sign": 1}]},
@@ -568,9 +590,9 @@ def test_create_accurate_rom_triggers_computation(analyzer):
     assert result.shape == (2, 2)
 
 
-# --------------------
-# Tests : get_correct_part_mvt
-# --------------------
+# # --------------------
+# # Tests : get_correct_part_mvt
+# # --------------------
 
 
 # get_correct_part_mvt shape error
@@ -582,8 +604,8 @@ def test_get_correct_part_mvt_shape_error(analyzer):
         analyzer.get_correct_part_mvt(q)
 
 
-# get_correct_part_mvt all correct
-# ---------------------------
+# # get_correct_part_mvt all correct
+# # ---------------------------
 def test_get_correct_part_mvt_all_correct(analyzer):
     analyzer.model.nb_q = 2
 
@@ -607,8 +629,8 @@ def test_get_correct_part_mvt_all_correct(analyzer):
     assert len(incorrect_idx) == 0
 
 
-# get_correct_part_mvt all incorrect
-# ---------------------------
+# # get_correct_part_mvt all incorrect
+# # ---------------------------
 def test_get_correct_part_mvt_all_incorrect(analyzer):
     analyzer.model.nb_q = 2
 
@@ -632,8 +654,8 @@ def test_get_correct_part_mvt_all_incorrect(analyzer):
     assert len(incorrect_idx) == 1
 
 
-# get_correct_part_mvt auto-call ROM
-# ---------------------------
+# # get_correct_part_mvt auto-call ROM
+# # ---------------------------
 def test_get_correct_part_mvt_auto_rom(analyzer):
     analyzer.model.nb_q = 2
 
