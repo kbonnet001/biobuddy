@@ -9,10 +9,6 @@ from biobuddy import BiomechanicalModelReal
 import biorbd
 from pathlib import Path
 
-# ---------------------------
-# Fixtures
-# ---------------------------
-
 
 @pytest.fixture
 def fake_model():
@@ -58,17 +54,16 @@ def analyzer(fake_model):
     return analyzer
 
 
-current_path_file = Path(__file__).parent.parent
-MODEL_EXAMPLE_PATH = f"{current_path_file}/examples/models/arm26_allbiceps_1dof.bioMod"
-MODEL_REAL = BiomechanicalModelReal().from_biomod(MODEL_EXAMPLE_PATH)
-
-
-@pytest.fixture
-def analyzer_example():
+def get_muscle_moment_analyzer():
+    current_path_file = Path(__file__).parent.parent
+    MODEL_EXAMPLE_PATH = f"{current_path_file}/examples/models/arm26_allbiceps_1dof.bioMod"
+    MODEL_REAL = BiomechanicalModelReal().from_biomod(MODEL_EXAMPLE_PATH)
     return MuscleMomentArmAnalyzer(MODEL_EXAMPLE_PATH, MODEL_REAL)
 
 
-def test_initialization(analyzer_example):
+def test_initialization():
+
+    analyzer_example = get_muscle_moment_analyzer()
 
     assert isinstance(analyzer_example.model, BiomechanicalModelReal)
     assert isinstance(analyzer_example.biorbd_model, biorbd.Model)
@@ -97,26 +92,68 @@ def test_create_sign_lever_arm_user_valid(analyzer):
 
     signs = np.array([[1, -1, 0], [0, 1, -1]])
 
-    analyzer.create_sign_lever_arm_user(signs)
+    analyzer.sign_lever_arm = signs
 
     expected = {
         "q1": {"m1": 1, "m2": -1, "m3": 0},
         "q2": {"m1": 0, "m2": 1, "m3": -1},
     }
 
-    assert analyzer.sign_lever_arm == expected
+    # Compare values (Sign enum values)
+    for q in expected:
+        for m in expected[q]:
+            assert analyzer.sign_lever_arm[q][m].value == expected[q][m]
 
 
 def test_create_sign_lever_arm_user_wrong_shape(analyzer):
 
     with pytest.raises(ValueError):
-        analyzer.create_sign_lever_arm_user(np.array([[1, 0]]))
+        analyzer.sign_lever_arm = np.array([[1, 0]])
 
 
 def test_create_sign_lever_arm_user_wrong_value(analyzer):
 
     with pytest.raises(ValueError):
-        analyzer.create_sign_lever_arm_user(np.array([[2, 0, 1], [0, 1, -1]]))
+        analyzer.sign_lever_arm = np.array([[2, 0, 1], [0, 1, -1]])
+
+
+def test_sign_lever_arm_setter_dict_valid(analyzer):
+    """Test that the sign_lever_arm setter accepts a valid dict."""
+    from biobuddy.utils.enums import Sign
+
+    analyzer._sign_lever_arm = {}
+    signs_dict = {
+        "q1": {"m1": 1, "m2": -1, "m3": 0},
+        "q2": {"m1": 0, "m2": 1, "m3": -1},
+    }
+    analyzer.sign_lever_arm = signs_dict
+
+    assert analyzer.sign_lever_arm["q1"]["m1"].value == 1
+    assert analyzer.sign_lever_arm["q1"]["m2"].value == -1
+    assert analyzer.sign_lever_arm["q2"]["m3"].value == -1
+
+
+def test_sign_lever_arm_setter_dict_wrong_dof_keys(analyzer):
+    """Test that dict with wrong dof keys raises ValueError."""
+    analyzer._sign_lever_arm = {}
+    with pytest.raises(ValueError, match="first keys"):
+        analyzer.sign_lever_arm = {"wrong_dof": {"m1": 1, "m2": -1, "m3": 0}}
+
+
+def test_sign_lever_arm_setter_dict_wrong_muscle_keys(analyzer):
+    """Test that dict with wrong muscle keys raises ValueError."""
+    analyzer._sign_lever_arm = {}
+    with pytest.raises(ValueError, match="second keys"):
+        analyzer.sign_lever_arm = {
+            "q1": {"wrong_muscle": 1},
+            "q2": {"m1": 0, "m2": 1, "m3": -1},
+        }
+
+
+def test_sign_lever_arm_setter_invalid_type(analyzer):
+    """Test that non-dict, non-ndarray type raises ValueError."""
+    with pytest.raises(ValueError):
+        analyzer.sign_lever_arm = [[1, -1, 0], [0, 1, -1]]
 
 
 # # ---------------------------
@@ -319,17 +356,18 @@ def test_output_structure(analyzer):
 # # ---------
 # # Tests : get
 # # ---------
-def test_get_ranges_from_idx_q(analyzer):
+def test_get_ranges_from_dof_index(analyzer):
     sign_dict = {
         "q1": {"m1": [{"range": (-1, 0), "sign": -1}]},
         "q2": {"m2": [{"range": (0, 1), "sign": 1}]},
     }
 
-    result = analyzer.get_ranges_from_idx_q(sign_dict, idx_q=0)
+    result = analyzer.get_ranges_from_dof_index(sign_dict, dof_idx=0)
 
     assert result == sign_dict["q1"]
 
-    # def test_get_ranges_from_idx_q_and_m(analyzer):
+
+def test_get_ranges_from_dof_and_muscle_indices(analyzer):
     sign_dict = {
         "q1": {
             "m1": [{"range": (-1, 0), "sign": -1}],
@@ -337,9 +375,16 @@ def test_get_ranges_from_idx_q(analyzer):
         }
     }
 
-    result = analyzer.get_ranges_from_idx_q_and_m(sign_dict, idx_q=0, idx_m=1)
+    result = analyzer.get_ranges_from_dof_and_muscle_indices(sign_dict, dof_idx=0, idx_muscle=1)
 
     assert result == sign_dict["q1"]["m2"]
+
+
+def test_get_ranges_from_dof_index_missing_dof(analyzer):
+    """Test that a missing DOF raises a KeyError."""
+    result_dict = {"q2": {"m1": []}}
+    with pytest.raises(KeyError):
+        analyzer.get_ranges_from_dof_index(result_dict, dof_idx=0)  # q1 is missing
 
 
 # # ---------------------------
@@ -352,29 +397,28 @@ def test_merge_ranges_joint(analyzer):
             "m1": [{"range": (-1.0, 0.0), "sign": -1}],
             "m2": [{"range": (0.0, 1.0), "sign": 1}],
             "m3": [{"range": (-0.5, 0.5), "sign": 1}],
-        }
+        },
+        "q2": {},
     }
 
-    analyzer.get_ranges_from_idx_q = lambda data, idx_q: data["q1"]
-
-    result = analyzer.merge_ranges_joint(idx_q=0)
+    result = analyzer.merge_ranges_joint(dof_idx=0)
 
     expected = sorted([-1.0, 0.0, 1.0, -0.5, 0.5])
 
     assert result == expected
 
-    # def test_merge_ranges_joint_duplicates(analyzer):
+
+def test_merge_ranges_joint_duplicates(analyzer):
     analyzer._ranges_by_joint = {
         "q1": {
             "m1": [{"range": (-1.0, 0.0), "sign": -1}],
             "m2": [{"range": (0.0, 1.0), "sign": 1}],
             "m3": [{"range": (-1.0, 1.0), "sign": 1}],
-        }
+        },
+        "q2": {},
     }
 
-    analyzer.get_ranges_from_idx_q = lambda data, idx_q: data["q1"]
-
-    result = analyzer.merge_ranges_joint(idx_q=0)
+    result = analyzer.merge_ranges_joint(dof_idx=0)
 
     # duplicates must be removed
     assert result == [-1.0, 0.0, 1.0]
@@ -384,9 +428,9 @@ def test_merge_ranges_joint(analyzer):
 # # Tests : merge_ranges_joint empty case
 # # ---------------------------
 def test_merge_ranges_joint_empty(analyzer):
-    analyzer.get_ranges_from_idx_q = lambda data, idx_q: {}
+    analyzer._ranges_by_joint = {"q1": {}, "q2": {}}
 
-    result = analyzer.merge_ranges_joint(idx_q=0)
+    result = analyzer.merge_ranges_joint(dof_idx=0)
 
     assert result == []
 
@@ -399,7 +443,7 @@ def test_merge_ranges_joint_empty(analyzer):
 # # Error: no sign_lever_arm
 # # ---------------------------
 def test_no_sign_lever_arm(analyzer):
-    analyzer.sign_lever_arm = {}
+    analyzer._sign_lever_arm = {}
 
     with pytest.raises(ValueError):
         analyzer.accurate_ranges_from_true_sign()
@@ -408,7 +452,7 @@ def test_no_sign_lever_arm(analyzer):
 # # Basic filtering (correct case)
 # # ---------------------------
 def test_accurate_ranges_filtering(analyzer):
-    analyzer.sign_lever_arm = {
+    analyzer._sign_lever_arm = {
         "q1": {"m1": 1, "m2": -1, "m3": 0},
         "q2": {"m1": 1, "m2": 1, "m3": -1},
     }
@@ -438,7 +482,7 @@ def test_accurate_ranges_filtering(analyzer):
 # # Missing expected sign
 # # ---------------------------
 def test_missing_expected_sign(analyzer):
-    analyzer.sign_lever_arm = {
+    analyzer._sign_lever_arm = {
         "q1": {"m1": 1, "m2": 1, "m3": 1},
         "q2": {"m1": 1, "m2": 1, "m3": 1},
     }
@@ -464,7 +508,7 @@ def test_missing_expected_sign(analyzer):
 # # Tests : compare ranges
 # # -------------------
 def test_compare_ranges_no_difference(analyzer, capsys):
-    analyzer.sign_lever_arm = {
+    analyzer._sign_lever_arm = {
         "q1": {"m1": 1},
     }
 
@@ -485,7 +529,7 @@ def test_compare_ranges_no_difference(analyzer, capsys):
 # # compare_ranges: mismatch sign
 # # ---------------------------
 def test_compare_ranges_sign_mismatch(analyzer):
-    analyzer.sign_lever_arm = {
+    analyzer._sign_lever_arm = {
         "q1": {"m1": 1},
     }
 
@@ -504,7 +548,7 @@ def test_compare_ranges_sign_mismatch(analyzer):
 # # compare_ranges: missing muscle
 # # ---------------------------
 def test_compare_ranges_missing_muscle(analyzer):
-    analyzer.sign_lever_arm = {
+    analyzer._sign_lever_arm = {
         "q1": {"m1": 1},  # expected_sign != 0 -> should trigger warning
     }
 
@@ -516,10 +560,26 @@ def test_compare_ranges_missing_muscle(analyzer):
     assert diff is True
 
 
+# # compare_ranges: missing muscle with expected sign 0 (no warning)
+# # ---------------------------
+def test_compare_ranges_missing_muscle_sign_zero(analyzer):
+    """Missing muscle is OK when expected sign is 0."""
+    from biobuddy.utils.enums import Sign
+
+    analyzer._sign_lever_arm = {
+        "q1": {"m1": Sign.ZERO},
+    }
+
+    accurate_ranges = {"q1": {}}  # m1 is missing but sign is 0 -> no warning
+
+    diff = analyzer.compare_ranges_and_user_sign(accurate_ranges)
+    assert diff is False
+
+
 # # compare_ranges: missing dof
 # # ---------------------------
 def test_compare_ranges_missing_dof(analyzer):
-    analyzer.sign_lever_arm = {
+    analyzer._sign_lever_arm = {
         "q1": {"m1": 1},
     }
 
@@ -562,10 +622,38 @@ def test_create_accurate_rom_basic(analyzer):
     assert np.array_equal(result, expected)
 
 
+def test_create_accurate_rom_empty_muscle_range_warns(analyzer):
+    """create_accurate_rom should warn when a muscle has no accurate range."""
+    analyzer.model.get_dof_ranges.return_value = np.array([[-1.0], [1.0]])
+    analyzer.model.dof_names = ["q1"]
+    analyzer.model.muscle_names = ["m1"]
+    analyzer.accurate_ranges_array = np.zeros((1, 2))
+
+    analyzer.accurate_ranges_by_joint = {
+        "q1": {"m1": []},  # empty -> should trigger warning
+    }
+
+    with pytest.warns(UserWarning, match="No accurate range found"):
+        result = analyzer.create_accurate_rom()
+
+    assert result is not None
+
+
+def test_create_accurate_rom_no_sign_lever_arm(analyzer):
+    """create_accurate_rom returns None and prints message when no sign_lever_arm."""
+    analyzer.accurate_ranges_by_joint = {}
+    analyzer._sign_lever_arm = {}
+    analyzer.accurate_ranges_array = np.zeros((2, 2))
+
+    result = analyzer.create_accurate_rom()
+
+    assert result is None
+
+
 def test_create_accurate_rom_triggers_computation(analyzer):
     analyzer.accurate_ranges_by_joint = {}
 
-    analyzer.sign_lever_arm = {
+    analyzer._sign_lever_arm = {
         "q1": {"m1": 1},
         "q2": {"m1": 1},
     }
@@ -589,20 +677,20 @@ def test_create_accurate_rom_triggers_computation(analyzer):
 
 
 # # --------------------
-# # Tests : get_correct_part_mvt
+# # Tests : get_correct_part_of_movement
 # # --------------------
 
 
-# get_correct_part_mvt shape error
+# get_correct_part_of_movement shape error
 # ---------------------------
 def test_get_correct_part_mvt_shape_error(analyzer):
     q = np.zeros((1, 10))  # wrong nb_q
 
     with pytest.raises(ValueError, match="Incorrect shape"):
-        analyzer.get_correct_part_mvt(q)
+        analyzer.get_correct_part_of_movement(q)
 
 
-# # get_correct_part_mvt all correct
+# # get_correct_part_of_movement all correct
 # # ---------------------------
 def test_get_correct_part_mvt_all_correct(analyzer):
     analyzer.model.nb_q = 2
@@ -621,13 +709,13 @@ def test_get_correct_part_mvt_all_correct(analyzer):
         ]
     )
 
-    correct_idx, incorrect_idx, correct_q, incorrect_q = analyzer.get_correct_part_mvt(q)
+    correct_idx, incorrect_idx, correct_q, incorrect_q = analyzer.get_correct_part_of_movement(q)
 
     assert len(correct_idx) == 1
     assert len(incorrect_idx) == 0
 
 
-# # get_correct_part_mvt all incorrect
+# # get_correct_part_of_movement all incorrect
 # # ---------------------------
 def test_get_correct_part_mvt_all_incorrect(analyzer):
     analyzer.model.nb_q = 2
@@ -646,13 +734,13 @@ def test_get_correct_part_mvt_all_incorrect(analyzer):
         ]
     )
 
-    correct_idx, incorrect_idx, correct_q, incorrect_q = analyzer.get_correct_part_mvt(q)
+    correct_idx, incorrect_idx, correct_q, incorrect_q = analyzer.get_correct_part_of_movement(q)
 
     assert len(correct_idx) == 0
     assert len(incorrect_idx) == 1
 
 
-# # get_correct_part_mvt auto-call ROM
+# # get_correct_part_of_movement auto-call ROM
 # # ---------------------------
 def test_get_correct_part_mvt_auto_rom(analyzer):
     analyzer.model.nb_q = 2
@@ -673,6 +761,33 @@ def test_get_correct_part_mvt_auto_rom(analyzer):
         ]
     )
 
-    result = analyzer.get_correct_part_mvt(q)
+    result = analyzer.get_correct_part_of_movement(q)
 
     assert len(result) == 4
+
+
+# # get_correct_part_of_movement mixed correct/incorrect segments
+# # ---------------------------
+def test_get_correct_part_mvt_mixed_segments(analyzer):
+    """Verify that non-consecutive correct/incorrect frames are split into separate segments."""
+    analyzer.model.nb_q = 2
+
+    analyzer.accurate_ranges_array = np.array(
+        [
+            [-1.0, 1.0],
+            [-1.0, 1.0],
+        ]
+    )
+
+    # Frames: correct, incorrect, correct — results in 2 correct segments, 1 incorrect
+    q = np.array(
+        [
+            [0.0, 2.0, 0.5],
+            [0.0, 2.0, 0.5],
+        ]
+    )
+
+    correct_idx, incorrect_idx, correct_q, incorrect_q = analyzer.get_correct_part_of_movement(q)
+
+    assert len(correct_idx) == 2
+    assert len(incorrect_idx) == 1

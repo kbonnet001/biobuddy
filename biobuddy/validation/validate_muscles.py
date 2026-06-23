@@ -345,7 +345,7 @@ class MuscleValidator:
         fig.update_xaxes(title_text="Range (rad)", row=1, col=2)
         fig.update_yaxes(title_text="Length (m)", row=1, col=2)
 
-        fig.show()
+        fig.show(renderer="browser")
         return fig
 
     def plot_moment_arm(self) -> "go.Figure":
@@ -428,7 +428,7 @@ class MuscleValidator:
             for idx_col in range(nb_col - (nb_row * nb_col - nb_muscles), nb_col):
                 fig.update_xaxes(title_text="Range (rad)", row=nb_row - 1, col=idx_col + 1)
 
-        fig.show()
+        fig.show(renderer="browser")
         return fig
 
     def plot_torques(
@@ -522,5 +522,5 @@ class MuscleValidator:
             for idx_col in range(nb_col - (nb_row * nb_col - nb_muscles), nb_col):
                 fig.update_xaxes(title_text="Range (rad)", row=nb_row - 1, col=idx_col + 1)
 
-        fig.show()
+        fig.show(renderer="browser")
         return fig

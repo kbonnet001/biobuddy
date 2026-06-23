@@ -5,9 +5,12 @@ different sign.
 Then, the user could give the correct sign of moment arm for each joint and muscle.
 The correct rom are then kept.
 Then, user could give a mouvement q(t), where q(t_i) could be outside the correct rom.
-This mouvement cut to keep only sections where the moment arm is correct."""
+This mouvement cut to keep only sections where the moment arm is correct.
 
-from biobuddy import BiomechanicalModelReal
+TODO: This example should also show how to modify the range of motion of a model based on the muscle moment arm analysis.
+"""
+
+from biobuddy import BiomechanicalModelReal, Sign
 from biobuddy.model_modifiers.modify_rom_based_on_moment_arm import (
     MuscleMomentArmAnalyzer,
 )
@@ -33,17 +36,17 @@ moment_arm_analyser = MuscleMomentArmAnalyzer(model_path, model, nb_states=50)
 # If the sign is 0, the moment arm is null over the entire ROM
 print(moment_arm_analyser.ranges_by_joint)
 # ----
-# Get the ranges for a specific DOF and muscle
-print(moment_arm_analyser.ranges_by_joint[model.dof_names[0]][model.muscle_names[0]])
+# Get the ranges for a specific DoF and muscle
+print(moment_arm_analyser.ranges_by_joint["r_ulna_radius_hand_rotation1_rotZ"]["BIClong"])
 
 # Alternative way using indices
-print(moment_arm_analyser.get_ranges_from_idx_q_and_m(moment_arm_analyser.ranges_by_joint, 0, 0))
+print(moment_arm_analyser.get_ranges_from_dof_and_muscle_indices(moment_arm_analyser.ranges_by_joint, dof_idx=0, idx_muscle=0))
 # ----
 # Get all muscle ranges for one DOF
-print(moment_arm_analyser.ranges_by_joint[model.dof_names[0]])
+print(moment_arm_analyser.ranges_by_joint["r_ulna_radius_hand_rotation1_rotZ"])
 
-# Alternative way using DOF index only
-print(moment_arm_analyser.get_ranges_from_idx_q(moment_arm_analyser.ranges_by_joint, 0))
+# Alternative way using DoF index only
+print(moment_arm_analyser.get_ranges_from_dof_index(moment_arm_analyser.ranges_by_joint, dof_idx=0))
 # ----
 # Visualize the computed ranges
 moment_arm_analyser.plot_ranges_with_true_button(
@@ -62,32 +65,24 @@ sign_lever_arm_user = np.array(
         [-1, -1],
     ]
 )
-
-# Validate and update the expected signs
-moment_arm_analyser.create_sign_lever_arm_user(sign_lever_arm_user)
+moment_arm_analyser.sign_lever_arm = sign_lever_arm_user
 
 # b) Using an explicit dictionary:
 # (Note: this reflects the internal data structure)
-
-# Define the expected sign
 sign_lever_arm_user = {
     "r_ulna_radius_hand_rotation1_rotZ": {
-        "BIClong": -1,
-        "BICshort": -1,
+        "BIClong": Sign.NEGATIVE,
+        "BICshort": Sign.NEGATIVE,
     },
 }
-
-# Update the expected signs
-moment_arm_analyser.update_sign_lever_arm(sign_lever_arm_user)
+moment_arm_analyser.sign_lever_arm = sign_lever_arm_user
 
 # Filter the ranges based on the expected sign
 # and keep only the consistent ranges
 moment_arm_analyser.accurate_ranges_from_true_sign()
 print(moment_arm_analyser.accurate_ranges_by_joint)
 
-# You can also use get_ranges_from_idx_q_and_m() and get_ranges_from_idx_q()
-
-# Generate the final ROM array from the filtered ranges
+# Generate the final RoM array from the filtered ranges
 accurate_ranges = moment_arm_analyser.create_accurate_rom()
 print(accurate_ranges)
 
@@ -108,9 +103,9 @@ for idx_q in range(model.nb_q):
     q[idx_q, :] = np.linspace(0.0, np.pi, N)
 
 # Get indices and values of valid and invalid portions of q(t)
-all_correct_idx, all_incorrect_idx, all_correct_q, all_incorrect_q = moment_arm_analyser.get_correct_part_mvt(q)
+all_correct_idx, all_incorrect_idx, all_correct_q, all_incorrect_q = moment_arm_analyser.get_correct_part_of_movement(q)
 
-# Visualize q(t) together with ROM and valid/invalid segments
+# Visualize q(t) together with RoM and valid/invalid segments
 moment_arm_analyser.plot_q_qdot_rom(
     np.linspace(0.0, 1, N),
     q,

@@ -592,7 +592,7 @@ def _visualize_score(
         scene=dict(xaxis_title="X", yaxis_title="Y", zaxis_title="Z", aspectmode="data"),
         title="Score Point Visualization",
     )
-    fig.show()
+    fig.show(renderer="browser")
 
     return fig
 
