@@ -271,7 +271,9 @@ class MuscleMomentArmAnalyzer(MuscleValidator):
                 if expected_sign_value not in [item["sign"] for item in all_items]:
                     warnings.warn(f"There is no range with the sign {expected_sign} " f"for {dof_name} {m_name}")
                 else:
-                    accurate_ranges[dof_name][m_name] = [item for item in all_items if item["sign"] == expected_sign_value]
+                    accurate_ranges[dof_name][m_name] = [
+                        item for item in all_items if item["sign"] == expected_sign_value
+                    ]
 
         print("\nComparison with user sign : ")
         self.compare_ranges_and_user_sign(accurate_ranges)
