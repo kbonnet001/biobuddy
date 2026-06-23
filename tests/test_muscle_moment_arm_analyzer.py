@@ -437,7 +437,7 @@ def test_accurate_ranges_filtering(analyzer):
 
 # # Missing expected sign
 # # ---------------------------
-def test_missing_expected_sign(analyzer, capsys):
+def test_missing_expected_sign(analyzer):
     analyzer.sign_lever_arm = {
         "q1": {"m1": 1, "m2": 1, "m3": 1},
         "q2": {"m1": 1, "m2": 1, "m3": 1},
@@ -455,8 +455,6 @@ def test_missing_expected_sign(analyzer, capsys):
             "m3": [{"range": (-1, 1), "sign": 1}],
         },
     }
-
-    analyzer.accurate_ranges_from_true_sign()
 
     with pytest.warns(UserWarning):
         analyzer.accurate_ranges_from_true_sign()
