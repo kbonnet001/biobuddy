@@ -791,3 +791,167 @@ def test_get_correct_part_mvt_mixed_segments(analyzer):
 
     assert len(correct_idx) == 2
     assert len(incorrect_idx) == 1
+
+
+# # --------------------
+# # Tests : plot_ranges_with_true_button
+# # --------------------
+
+
+def test_plot_ranges_with_true_button_structure():
+    """Test the structure of the ranges plot without accurate ranges."""
+    analyzer_example = get_muscle_moment_analyzer()
+    fig = analyzer_example.plot_ranges_with_true_button(show_plot=False)
+
+    # One subplot per DOF
+    annotations = [a.text for a in fig.layout.annotations]
+    assert len(annotations) == analyzer_example.model.nb_q
+    dof_name = analyzer_example.model.dof_names[0]
+    assert f"q0 - {dof_name}" in annotations
+
+    # Title
+    assert "sign_moment_arm_" in fig.layout.title.text
+
+    # Without accurate_ranges, only "All ROM" button
+    assert len(fig.layout.updatemenus[0].buttons) == 1
+    assert fig.layout.updatemenus[0].buttons[0].label == "All ROM"
+
+    # Two sign regions per muscle (positive + negative)
+    assert len(fig.data) == analyzer_example.model.nb_muscles * 2
+
+    # Check trace names and muscle assignment
+    muscle_names_in_traces = [trace.y[0] for trace in fig.data]
+    for muscle_name in analyzer_example.model.muscle_names:
+        assert muscle_name in muscle_names_in_traces
+
+    region_names = {trace.name for trace in fig.data}
+    assert "Agonist region (+)" in region_names
+    assert "Antagonist region (-)" in region_names
+
+
+def test_plot_ranges_with_true_button_values():
+    """Test trace values for the ranges plot."""
+    analyzer_example = get_muscle_moment_analyzer()
+    fig = analyzer_example.plot_ranges_with_true_button(show_plot=False)
+
+    # First trace: BIClong antagonist region (negative sign, base at range min)
+    assert fig.data[0].name == "Antagonist region (-)"
+    assert fig.data[0].y == ("BIClong",)
+    np.testing.assert_almost_equal(fig.data[0].base, 0.0, decimal=6)
+    np.testing.assert_almost_equal(fig.data[0].x[0], 2.8697741103057655, decimal=6)
+
+    # Second trace: BIClong agonist region (positive sign)
+    assert fig.data[1].name == "Agonist region (+)"
+    assert fig.data[1].y == ("BIClong",)
+    np.testing.assert_almost_equal(fig.data[1].base, 2.8697741103057655, decimal=6)
+    np.testing.assert_almost_equal(fig.data[1].x[0], 0.2718258896942345, decimal=6)
+
+    # Third trace: BICshort antagonist region
+    assert fig.data[2].name == "Antagonist region (-)"
+    assert fig.data[2].y == ("BICshort",)
+    np.testing.assert_almost_equal(fig.data[2].base, 0.0, decimal=6)
+    np.testing.assert_almost_equal(fig.data[2].x[0], 2.8697741103057655, decimal=6)
+
+    # Fourth trace: BICshort agonist region
+    assert fig.data[3].name == "Agonist region (+)"
+    assert fig.data[3].y == ("BICshort",)
+    np.testing.assert_almost_equal(fig.data[3].base, 2.8697741103057655, decimal=6)
+    np.testing.assert_almost_equal(fig.data[3].x[0], 0.2718258896942345, decimal=6)
+
+
+def test_plot_ranges_with_true_button_with_accurate_ranges():
+    """Test that the True ROM button is added when accurate_ranges_by_joint is set."""
+    import warnings
+
+    analyzer_example = get_muscle_moment_analyzer()
+
+    # BIClong and BICshort are both antagonists (sign = -1) over most of the ROM
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        analyzer_example.sign_lever_arm = np.array([[-1, -1]])
+        analyzer_example.accurate_ranges_from_true_sign()
+
+    fig = analyzer_example.plot_ranges_with_true_button(show_plot=False)
+
+    # Should now have two buttons: "All ROM" and "True ROM"
+    button_labels = [b.label for b in fig.layout.updatemenus[0].buttons]
+    assert "All ROM" in button_labels
+    assert "True ROM" in button_labels
+
+    # Colors: traces in true ranges stay colored, others turn black
+    true_rom_colors = fig.layout.updatemenus[0].buttons[1].args[0]["marker.color"]
+    all_rom_colors = fig.layout.updatemenus[0].buttons[0].args[0]["marker.color"]
+    assert len(true_rom_colors) == len(fig.data)
+    assert len(all_rom_colors) == len(fig.data)
+    assert "black" in true_rom_colors  # some traces are dimmed
+
+
+# # --------------------
+# # Tests : plot_q_qdot_rom
+# # --------------------
+
+
+def test_plot_q_qdot_rom_structure():
+    """Test the structure of the q vs time plot."""
+    analyzer_example = get_muscle_moment_analyzer()
+
+    nb_dof = analyzer_example.model.nb_q  # 1
+    t = np.linspace(0, 1, 10)
+    q = np.array([np.linspace(0.5, 2.5, 10)])  # shape (1, 10)
+    bounds = np.array([[0.0, 3.14]])
+
+    all_correct_idx = [np.array([0, 1, 2]), np.array([6, 7, 8, 9])]
+    all_incorrect_idx = [np.array([3, 4, 5])]
+
+    fig = analyzer_example.plot_q_qdot_rom(t, q, bounds, all_correct_idx, all_incorrect_idx, show_plot=False)
+
+    # Title
+    assert "Joint states and ROM limits" in fig.layout.title.text
+
+    # Subplot titles (dof names)
+    annotations = [a.text for a in fig.layout.annotations]
+    for dof_name in analyzer_example.model.dof_names:
+        assert dof_name in annotations
+
+    # Traces: 2 correct segments + 1 incorrect segment + 2 bounds = 5
+    assert len(fig.data) == len(all_correct_idx) + len(all_incorrect_idx) + 2
+
+    trace_names = [trace.name for trace in fig.data]
+    assert trace_names.count("Usable moment range") == len(all_correct_idx)
+    assert trace_names.count("Non usable moment range") == len(all_incorrect_idx)
+    assert trace_names.count("Moment-consistent limits") == 2
+
+    # Axis labels
+    assert fig.layout.yaxis.title.text == "q (rad)"
+    assert fig.layout.xaxis.title.text == "Time (s)"
+
+
+def test_plot_q_qdot_rom_trace_data():
+    """Test that trace x/y data matches the input arrays."""
+    analyzer_example = get_muscle_moment_analyzer()
+
+    t = np.linspace(0, 1, 6)
+    q = np.array([np.linspace(1.0, 2.0, 6)])
+    bounds = np.array([[0.5, 2.5]])
+
+    all_correct_idx = [np.array([0, 1, 2])]
+    all_incorrect_idx = [np.array([3, 4, 5])]
+
+    fig = analyzer_example.plot_q_qdot_rom(t, q, bounds, all_correct_idx, all_incorrect_idx, show_plot=False)
+
+    # First trace: correct segment
+    correct_trace = fig.data[0]
+    assert correct_trace.name == "Usable moment range"
+    np.testing.assert_array_almost_equal(correct_trace.x, t[all_correct_idx[0]])
+
+    # Second trace: incorrect segment
+    incorrect_trace = fig.data[1]
+    assert incorrect_trace.name == "Non usable moment range"
+    np.testing.assert_array_almost_equal(incorrect_trace.x, t[all_incorrect_idx[0]])
+
+    # Bound traces: constant y at the bound values
+    lower_bound_trace = fig.data[2]
+    upper_bound_trace = fig.data[3]
+    assert lower_bound_trace.name == "Moment-consistent limits"
+    np.testing.assert_array_almost_equal(lower_bound_trace.y, [bounds[0, 0]] * len(t))
+    np.testing.assert_array_almost_equal(upper_bound_trace.y, [bounds[0, 1]] * len(t))

@@ -266,11 +266,12 @@ class MuscleMomentArmAnalyzer(MuscleValidator):
 
                 all_items = accurate_ranges[dof_name][m_name]
                 expected_sign = self.sign_lever_arm[dof_name][m_name]
+                expected_sign_value = expected_sign.value if isinstance(expected_sign, Sign) else expected_sign
 
-                if expected_sign not in [item["sign"] for item in all_items]:
+                if expected_sign_value not in [item["sign"] for item in all_items]:
                     warnings.warn(f"There is no range with the sign {expected_sign} " f"for {dof_name} {m_name}")
                 else:
-                    accurate_ranges[dof_name][m_name] = [item for item in all_items if item["sign"] == expected_sign]
+                    accurate_ranges[dof_name][m_name] = [item for item in all_items if item["sign"] == expected_sign_value]
 
         print("\nComparison with user sign : ")
         self.compare_ranges_and_user_sign(accurate_ranges)
@@ -577,6 +578,7 @@ class MuscleMomentArmAnalyzer(MuscleValidator):
             fig.write_html(f"{path_to_save}/Sign_moment_arm.html")
         if show_plot:
             fig.show(renderer="browser")
+        return fig
 
     def plot_q_qdot_rom(
         self,
@@ -680,5 +682,6 @@ class MuscleMomentArmAnalyzer(MuscleValidator):
             fig.write_html(f"{path_to_save}/Joint_states_and_ROM_limits.html")
         if show_plot:
             fig.show(renderer="browser")
+        return fig
 
         return fig
