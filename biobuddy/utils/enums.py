@@ -44,6 +44,7 @@ class Sign(Enum):
     ZERO = 0
     NEGATIVE = -1
 
+
 class ViewAs(Enum):
     BIORBD = "biorbd"
     # OPENSIM = "opensim"  # TODO

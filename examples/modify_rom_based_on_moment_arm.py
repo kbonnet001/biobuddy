@@ -40,7 +40,11 @@ print(moment_arm_analyser.ranges_by_joint)
 print(moment_arm_analyser.ranges_by_joint["r_ulna_radius_hand_rotation1_rotZ"]["BIClong"])
 
 # Alternative way using indices
-print(moment_arm_analyser.get_ranges_from_dof_and_muscle_indices(moment_arm_analyser.ranges_by_joint, dof_idx=0, idx_muscle=0))
+print(
+    moment_arm_analyser.get_ranges_from_dof_and_muscle_indices(
+        moment_arm_analyser.ranges_by_joint, dof_idx=0, idx_muscle=0
+    )
+)
 # ----
 # Get all muscle ranges for one DOF
 print(moment_arm_analyser.ranges_by_joint["r_ulna_radius_hand_rotation1_rotZ"])

@@ -16,11 +16,11 @@ from ..components.real.biomechanical_model_real import BiomechanicalModelReal
 
 class MuscleMomentArmAnalyzer(MuscleValidator):
     def __init__(
-            self,
-            model_path: str,
-            model: BiomechanicalModelReal,
-            nb_states: int= 50,
-            custom_ranges: np.ndarray | None = None,
+        self,
+        model_path: str,
+        model: BiomechanicalModelReal,
+        nb_states: int = 50,
+        custom_ranges: np.ndarray | None = None,
     ):
         """
         Initialize the MuscleMomentArmAnalyzer.
@@ -52,11 +52,14 @@ class MuscleMomentArmAnalyzer(MuscleValidator):
     def sign_lever_arm(self, list_sign: dict[str, dict[str, int | Sign]] | np.ndarray[int | Sign]):
         if isinstance(list_sign, dict):
             if set(list_sign.keys()) != set(self.model.dof_names):
-                raise ValueError(f"The first keys of the dict should be the dof names, got {list_sign.keys()}, expected {self.model.dof_names}")
+                raise ValueError(
+                    f"The first keys of the dict should be the dof names, got {list_sign.keys()}, expected {self.model.dof_names}"
+                )
             for dof_name in self.model.dof_names:
                 if set(list_sign[dof_name].keys()) != set(self.model.muscle_names):
                     raise ValueError(
-                        f"The second keys of the dict should be the muscle names, got {list_sign[dof_name].keys()} for dof {dof_name}, expected {self.model.muscle_names}")
+                        f"The second keys of the dict should be the muscle names, got {list_sign[dof_name].keys()} for dof {dof_name}, expected {self.model.muscle_names}"
+                    )
                 else:
                     self._sign_lever_arm[dof_name] = {}
                     for m_name in self.model.muscle_names:
@@ -65,7 +68,9 @@ class MuscleMomentArmAnalyzer(MuscleValidator):
                             self._sign_lever_arm[dof_name][m_name] = sign
                         else:
                             if sign not in [s.value for s in Sign]:
-                                raise ValueError(f"Invalid sign {sign} at ({dof_name}, {m_name}). Sign must be either -1, 0 or 1")
+                                raise ValueError(
+                                    f"Invalid sign {sign} at ({dof_name}, {m_name}). Sign must be either -1, 0 or 1"
+                                )
                             else:
                                 self._sign_lever_arm[dof_name][m_name] = Sign(sign)
         elif isinstance(list_sign, np.ndarray):
@@ -73,16 +78,22 @@ class MuscleMomentArmAnalyzer(MuscleValidator):
                 raise ValueError(
                     f"Invalid shape, need : ({self.model.nb_q},{self.model.nb_muscles}) but have {list_sign.shape}"
                 )
-            self._sign_lever_arm = {dof_name: {m_name: None for m_name in self.model.muscle_names} for dof_name in self.model.dof_names}
+            self._sign_lever_arm = {
+                dof_name: {m_name: None for m_name in self.model.muscle_names} for dof_name in self.model.dof_names
+            }
             for idx_dof, dof_name in enumerate(self.model.dof_names):
                 for idx_muscle, m_name in enumerate(self.model.muscle_names):
                     sign = list_sign[idx_dof, idx_muscle]
                     if sign not in [s.value for s in Sign]:
-                        raise ValueError(f"Invalid sign {sign} at ({dof_name}, {m_name}). Sign must be either -1, 0 or 1")
+                        raise ValueError(
+                            f"Invalid sign {sign} at ({dof_name}, {m_name}). Sign must be either -1, 0 or 1"
+                        )
                     else:
                         self._sign_lever_arm[dof_name][m_name] = Sign(sign)
         else:
-            raise ValueError(f"list_sign should be a dict[dict[int | Sign]] or a np.array[int | Sign], you have {type(list_sign)}.")
+            raise ValueError(
+                f"list_sign should be a dict[dict[int | Sign]] or a np.array[int | Sign], you have {type(list_sign)}."
+            )
 
     def find_zero_newton(self, q_init: np.ndarray, joint_id: int, muscle_id: int):
         """
@@ -138,7 +149,9 @@ class MuscleMomentArmAnalyzer(MuscleValidator):
 
         self.muscle_moment_arm[np.abs(self.muscle_moment_arm) < tol] = 0.0
 
-        result = {dof_name: {muscle_name: [] for muscle_name in self.model.muscle_names} for dof_name in self.model.dof_names}
+        result = {
+            dof_name: {muscle_name: [] for muscle_name in self.model.muscle_names} for dof_name in self.model.dof_names
+        }
 
         n_q = self.model.nb_q
         n_m = self.model.nb_muscles
@@ -155,7 +168,10 @@ class MuscleMomentArmAnalyzer(MuscleValidator):
                 else:
 
                     # 1. Detect indices where the sign of the moment arm changes between consecutive states
-                    prod = self.muscle_moment_arm[dof_idx, idx_muscle, :-1] * self.muscle_moment_arm[dof_idx, idx_muscle, 1:]
+                    prod = (
+                        self.muscle_moment_arm[dof_idx, idx_muscle, :-1]
+                        * self.muscle_moment_arm[dof_idx, idx_muscle, 1:]
+                    )
                     flip_idx = np.where(prod < 0)[0]
 
                     # 2. Newton --> find zeros more precisely
@@ -168,7 +184,9 @@ class MuscleMomentArmAnalyzer(MuscleValidator):
                     zeros = sorted(zeros)
 
                     # 3. bounds
-                    bounds = [self.model.get_dof_ranges()[0, dof_idx]] + zeros + [self.model.get_dof_ranges()[1, dof_idx]]
+                    bounds = (
+                        [self.model.get_dof_ranges()[0, dof_idx]] + zeros + [self.model.get_dof_ranges()[1, dof_idx]]
+                    )
 
                     # 4. Determine the sign of the moment arm in each interval between detected zero crossings
                     for a, b in zip(bounds[:-1], bounds[1:]):
@@ -432,7 +450,7 @@ class MuscleMomentArmAnalyzer(MuscleValidator):
 
         return all_correct_idx, all_incorrect_idx, all_correct_q, all_incorrect_q
 
-    def plot_ranges_with_true_button(self, path_to_save: str="", show_plot: bool=True) -> None:
+    def plot_ranges_with_true_button(self, path_to_save: str = "", show_plot: bool = True) -> None:
 
         n_q = len(self.ranges_by_joint)
         nb_line, nb_column = n_q, 1
