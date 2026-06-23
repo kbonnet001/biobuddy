@@ -323,7 +323,7 @@ class SegmentCoordinateSystemUtils:
                 for i_frame in range(frame_count_func):
                     cor_func[:, i_frame] = (rt_parent_func[i_frame] @ cor_in_local).reshape(4)
                 fig = _visualize_score(functional_data, rt_parent_func, rt_child_func, cor_func)
-                fig.show(renderer = "browser")
+                fig.show(renderer="browser")
 
             # Collapse across frames
             return np.nanmean(cor_static, axis=1)
@@ -455,7 +455,9 @@ class SegmentCoordinateSystemUtils:
                 rt_child_static = SegmentCoordinateSystemUtils.rigidify(
                     functional_data=child_static_marker_data,
                 )
-                fig = _visualize_score(static_markers, rt_parent_static, rt_child_static, [start_aor_static, end_aor_static])
+                fig = _visualize_score(
+                    static_markers, rt_parent_static, rt_child_static, [start_aor_static, end_aor_static]
+                )
                 fig.show(renderer="browser")
 
                 rt_parent_func = sara_cache[static_markers_hash][1]
