@@ -313,7 +313,8 @@ class SegmentCoordinateSystemUtils:
             if visualize and not is_in_cache:  # Do not show twice the same visualization
                 child_static_marker_data = static_markers.get_partial_dict_data(child_marker_names)
                 rt_child_static = SegmentCoordinateSystemUtils.rigidify(child_static_marker_data)
-                _visualize_score(static_markers, rt_parent_static, rt_child_static, cor_static)
+                fig = _visualize_score(static_markers, rt_parent_static, rt_child_static, cor_static)
+                fig.show()
 
                 rt_parent_func = score_cache[static_markers_hash][1]
                 rt_child_func = score_cache[static_markers_hash][2]
@@ -321,7 +322,8 @@ class SegmentCoordinateSystemUtils:
                 cor_func = np.zeros((4, frame_count_func))
                 for i_frame in range(frame_count_func):
                     cor_func[:, i_frame] = (rt_parent_func[i_frame] @ cor_in_local).reshape(4)
-                _visualize_score(functional_data, rt_parent_func, rt_child_func, cor_func)
+                fig = _visualize_score(functional_data, rt_parent_func, rt_child_func, cor_func)
+                fig.show(renderer = "browser")
 
             # Collapse across frames
             return np.nanmean(cor_static, axis=1)
@@ -453,7 +455,8 @@ class SegmentCoordinateSystemUtils:
                 rt_child_static = SegmentCoordinateSystemUtils.rigidify(
                     functional_data=child_static_marker_data,
                 )
-                _visualize_score(static_markers, rt_parent_static, rt_child_static, [start_aor_static, end_aor_static])
+                fig = _visualize_score(static_markers, rt_parent_static, rt_child_static, [start_aor_static, end_aor_static])
+                fig.show(renderer="browser")
 
                 rt_parent_func = sara_cache[static_markers_hash][1]
                 rt_child_func = sara_cache[static_markers_hash][2]
@@ -463,7 +466,8 @@ class SegmentCoordinateSystemUtils:
                 for i_frame in range(frame_count_func):
                     end_aor_func[:, i_frame] = (rt_parent_func[i_frame] @ aor_parent).reshape(4)
                     start_aor_func[:, i_frame] = (rt_parent_func[i_frame] @ cor_parent).reshape(4)
-                _visualize_score(functional_data, rt_parent_func, rt_child_func, [start_aor_func, end_aor_func])
+                fig = _visualize_score(functional_data, rt_parent_func, rt_child_func, [start_aor_func, end_aor_func])
+                fig.show(renderer="browser")
 
             # Collapse across frames
             return np.nanmean(start_aor_static, axis=1), np.nanmean(end_aor_static, axis=1)
@@ -592,7 +596,6 @@ def _visualize_score(
         scene=dict(xaxis_title="X", yaxis_title="Y", zaxis_title="Z", aspectmode="data"),
         title="Score Point Visualization",
     )
-    fig.show(renderer="browser")
 
     return fig
 

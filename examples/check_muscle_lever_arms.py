@@ -26,9 +26,12 @@ def plot_muscle_validation(model_path: str):
 
     # Create the MuscleValidator object
     muscle_validator = MuscleValidator(model)
-    muscle_validator.plot_force_length()
-    muscle_validator.plot_moment_arm()
-    muscle_validator.plot_torques()
+    fig = muscle_validator.plot_force_length()
+    fig.show(renderer="browser")
+    fig = muscle_validator.plot_moment_arm()
+    fig.show(renderer="browser")
+    fig = muscle_validator.plot_torques()
+    fig.show(renderer="browser")
 
 
 def main():

@@ -680,3 +680,5 @@ class MuscleMomentArmAnalyzer(MuscleValidator):
             fig.write_html(f"{path_to_save}/Joint_states_and_ROM_limits.html")
         if show_plot:
             fig.show(renderer="browser")
+
+        return fig
