@@ -490,6 +490,7 @@ def test_write_graphviz():
         output_dot = f.read()
 
     assert reference_dot == output_dot
+    assert len(output_dot) > 4700  #  Actually 4766
 
 
 def test_segment_has_ghost_parents():
@@ -563,6 +564,39 @@ def test_children_segment_names():
 
     children = model.children_segment_names("parent")
     assert set(children) == {"child", "child2", "child3"}
+
+
+def test_children_segments():
+    # Create a simple model
+    model = create_simple_model()
+
+    # Test getting children of parent segment
+    children = model.children_segments("parent")
+    assert children[0].name == "child"
+
+    # Test getting children of child segment (should be empty)
+    children = model.children_segments("child")
+    assert children == []
+
+    # Add more children to test multiple children
+    model.add_segment(
+        SegmentReal(
+            name="child2",
+            parent_name="parent",
+        )
+    )
+    model.add_segment(
+        SegmentReal(
+            name="child3",
+            parent_name="parent",
+        )
+    )
+
+    children = model.children_segments("parent")
+    assert len(children) == 3
+    assert children[0].name == "child"
+    assert children[1].name == "child2"
+    assert children[2].name == "child3"
 
 
 def test_get_chain_between_segments():
